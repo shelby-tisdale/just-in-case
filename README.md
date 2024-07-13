@@ -15,4 +15,5 @@ The dashboard consists of three pages exploring the following:
 - **Comfortability**: self-reported measures of comfort in accessing sexual and reproductive health resources across demographic groups.
 
 All code for creating the dashboard can be found in `dashboard.qmd`.
+
 _This dashboard was created by Joann Le and Shelby Tisdale as part of a hackathon for the 2024 Equitable Data Science REU at the University of Minnesota._
