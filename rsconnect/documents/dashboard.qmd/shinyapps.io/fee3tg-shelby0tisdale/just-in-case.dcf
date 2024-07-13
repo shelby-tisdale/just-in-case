@@ -1,0 +1,14 @@
+name: just-in-case
+title: just-in-case
+username: fee3tg-shelby0tisdale
+account: fee3tg-shelby0tisdale
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 12312659
+bundleId: 8858792
+url: https://fee3tg-shelby0tisdale.shinyapps.io/just-in-case/
+version: 1
+quarto_version: 1.5.54
+quarto_engines: knitr
+asMultiple: FALSE
+asStatic: FALSE
