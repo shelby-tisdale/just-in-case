@@ -1,0 +1,578 @@
+---
+title: "Just In Case Data Dashboard"
+format: dashboard
+server: shiny
+theme: [custom.scss]
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+#| label: load-packages
+#| warning: false
+#| context: setup
+
+library(tidyverse)
+library(gt)
+library(DT)
+library(janitor)
+library(shiny)
+library(knitr)
+library(kableExtra)
+library(scales)
+library(extrafont)
+
+theme_set(theme_minimal(base_size = 24,
+                        base_family = "Atkinson Hyperlegible"))
+```
+
+```{r}
+#| label: load-data
+#| context: setup
+#| warning: false
+#| message: false
+
+# data directory for shelby
+data_dir <- 'C:/Users/queen/Box/REU Hackathon II/data/'
+
+setwd(data_dir)
+
+first_survey <- read_csv("cleaned_first_survey_on_sexual_and_reproductive_health.csv")
+
+jic_survey <- read_csv("cleaned_jic_sexual_and_reproductive_kit_survey_6-29-2023.csv")
+
+kit_requests <- read_csv("cleaned_kit_requests_F22_S23.csv")
+
+resource_use <- read_csv("cleaned_use_of_srh_and_access_existing_resources_2023.csv")
+
+  
+  convenience_orientation <- jic_survey |>
+  clean_names() |>
+  select(orientation, race, school_year, cleaned_gender, starts_with("convenience_of")) |>
+  pivot_longer(cols = starts_with("convenience"),
+               names_to = "location",
+               names_prefix = "convenience_of",
+               values_to = "convenience",
+               values_drop_na = TRUE
+               ) |>
+  mutate(location = str_remove(location, "_acquisition_"),
+         location = str_replace_all(location, "_", " "),
+         convenience = factor(convenience),
+         convenience = fct_relevel(
+           convenience, c("Very inconvenient", "Inconvenient", "Neutral",
+                          "Convenient", "Very convenient")))
+comfortability <- jic_survey |>
+  clean_names() |>
+  select(orientation, race, school_year, cleaned_gender, starts_with("comfort_of")) |>
+  pivot_longer(cols = starts_with("comfort"),
+               names_to = "location",
+               names_prefix = "comfort_of",
+               values_to = "comfortability",
+               values_drop_na = TRUE
+               ) |>
+  mutate(location = str_remove(location, "_acquisition_"),
+         location = str_replace_all(location, "_", " "),
+         comfortability = factor(comfortability),
+         comfortability = fct_relevel(
+           comfortability, c("Very uncomfortable", "Uncomfortable", "Neutral",
+                          "Comfortable", "Very comfortable")))
+```
+
+#  {.sidebar width="25%"}
+
+## *Just In Case* Data Dashboard
+
+### Perceptions of Convenience and Comfortability in Access to Sexual and Reproductive Health Resources
+
+This dashboard displays statistics for *Just In Case*, a student-led, grassroots health promotion strategy carried out at the University of Minnesota Rochester (UMR). This strategy is part of a larger grassroots and mutual-aid initiative between faculty and undergraduate students working together to address the sexual and reproductive health needs of undergraduates attending post-secondary settings with limited access to sexual and reproductive health resources by providing and increasing access to comprehensive, evidence-based, and sex-positive resources and tools.
+
+The dashboard consists of three pages exploring the following:
+
+-   **Home**: Demographics of *Just In Case* users.
+-   **Convenience**: perceptions of convenience of accessing sexual and reproductive health resources across demographic groups.
+-   **Comfortability**: self-reported measures of comfort in accessing sexual and reproductive health resources across demographic groups.
+
+*This dashboard was created by Joann Le and Shelby Tisdale as part of a hackathon for the 2024 Equitable Data Science REU at the University of Minnesota.*
+
+# Home
+
+## Row {height = "20%"}
+
+```{r}
+#| content: valuebox
+#| title: "Total respondents for initial demographic survey"
+
+list(
+  icon = "person",
+  color = "#fa7f5e",
+  value = nrow(first_survey)
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Total kit requests"
+
+list(
+  icon = "bag-plus",
+  color = "#b3bce5",
+  value = nrow(kit_requests)
+)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Total products requested"
+
+
+kit_count <- kit_requests |>
+  pivot_longer(
+  cols = Pregnancy_Test:Personal_Hygiene_Items,
+  names_to = "item",
+  values_to = "number"
+) |>
+  filter(number != 0) |>
+  group_by(item) |>
+  summarize(total_requested = sum(number)) |>
+  mutate(item = str_replace_all(item, "_", " "))
+
+list(
+  icon = "clipboard-heart",
+  color = "#ffcc00",
+  value = sum(kit_count$total_requested)
+)
+```
+
+## Row {height="30%"}
+
+### Column {width="40%"}
+
+```{r}
+#| title: "Gender of Surveyed Students"
+
+genderfreq_table <- first_survey %>% 
+  count(`Cleaned Gender`)
+
+genderfreq_table$Proportion <- prop.table(genderfreq_table$n) # add proportions
+genderfreq_table$Percentage <- genderfreq_table$Proportion * 100 # add percentages
+
+genderfreq_table |>
+  select(`Cleaned Gender`, n, Percentage) |>
+  kable(digits = 1,
+        col.names = c("Gender", "N", "%")) # |> 
+ # kable_styling(full_width = F,
+              #  bootstrap_options = c("hover", "condensed"))
+```
+
+### Column {width="60%"}
+
+```{r}
+#| fig-width: 10
+#| fig-height: 4
+#| title: "Race/Ethnicity of Surveyed Students"
+
+jic_survey %>% # From JIC Survey
+  filter(!is.na(Race)) |>
+  mutate(Race = factor(Race),
+         Race = fct_relevel(Race, c("White", "Asian / Pacific Islander", "Two or more races", "Black", "Hispanic or Latino")),
+         Race = fct_rev(Race)) |>
+  ggplot(aes(x = Race)) +
+  geom_bar(fill = "#b3bce5") + 
+  coord_flip() + 
+  labs(y = "Number of respondents") +
+  theme_minimal(base_size = 25, base_family = "Atkinson Hyperlegible") +
+  theme(
+    axis.text = element_text(size = 30)
+  )
+```
+
+## Row {height="50%"}
+
+### Column {width="40%"}
+
+```{r}
+#| title: "Sexual Orientation of Surveyed Students"
+
+sofreq_table <- resource_use %>% 
+  count(Orientation) |>
+  arrange(desc(n))
+
+sofreq_table$Proportion <- prop.table(sofreq_table$n) # add proportions
+sofreq_table$Percentage <- sofreq_table$Proportion * 100 # add percentages
+#kable(sofreq_table)
+
+sofreq_table |>
+  select(Orientation, n, Percentage) |>
+  kable(digits = 1,
+        col.names = c("Sexual Orientation", "N", "%"))# |> 
+ # kable_styling(full_width = F,
+   #             bootstrap_options = c("hover", "condensed"))
+```
+
+### Column {width="60%"}
+
+```{r}
+#| title: "Class Year of Surveyed Students"
+#| fig-width: 8
+#| fig-height: 4
+
+n_students <- nrow(resource_use) #Resource Use
+
+resource_use |> # Learn how to reorder the class years
+  count(`School Year`) |>
+  mutate(prop = n / sum(n)) |>
+  mutate(`School Year` = as.factor(`School Year`),
+         `School Year` = fct_relevel(`School Year`,
+                                   c("Freshman", "Sophomore", "Junior", "Senior"))) |>
+  ggplot(aes(x = `School Year`, y = n, group = 1)) +
+  geom_line(linewidth = 1.5, color = "#0e263560") +
+  geom_point(size = 3, color = "#fa7f5e") +
+  geom_point(size = 6, color = "#b3bce5", shape = "circle open") +
+  labs(x = "Class Year", y = "Count") +
+scale_y_continuous(
+    "Count",
+    sec.axis = sec_axis(~ . / n_students, 
+                        name = "Proportion", 
+                        labels = label_percent())
+  )
+```
+
+# Convenience
+
+## Row {height="40%"}
+
+### Column {width="20%"}
+
+```{r}
+#| content: valuebox
+#| title: "Percent of surveyed students who believe contraceptive products are available on UMR campus"
+#| icon: hand-thumbs-up
+#| color: "#c3dfd1"
+
+avail_contracept <- first_survey |> # From First Survey
+  count(`Contraceptives Availability at UMR`) |>
+  mutate(prop = n / sum(n)) |>
+  filter(`Contraceptives Availability at UMR` == "Yes") |>
+  pull(prop) 
+
+list(label_percent(accuracy = 0.1)(avail_contracept))
+```
+
+### Column {width="20%"}
+
+```{r}
+#| content: valuebox
+#| title: "Percent of surveyed students who see cost as a barrier to accessing contraceptives at school"
+#| icon: cash-coin
+
+cost_barrier <- resource_use |> # From Resource Use
+  count(`Cost Barrier`) |>
+  mutate(prop = n / sum(n)) |>
+  filter(`Cost Barrier` == "1") |>
+  pull(prop)
+
+# placeholder value
+list(value = label_percent(accuracy = 0.1)(cost_barrier),
+     color = "#eda25e")
+    #value = label_percent(accuracy = 0.1)(cost_barrier)
+```
+
+### Column {width="60%"}
+
+```{r}
+#| title: "Student perceptions of resource access at UMR"
+#| fig-width: 10
+#| fig-height: 4
+
+access <- first_survey |>
+  select(contains("Access")) |>
+  pivot_longer(cols = contains("Access"),
+               names_to = "access_type",
+               values_to = "is_access",
+               values_drop_na = TRUE) |>
+  group_by(access_type) |>
+  mutate(access_type = str_remove(access_type, "Access to "),
+         access_type = str_replace_all(access_type, "'.'", " "))
+
+access |>
+  count(access_type, is_access) |>
+  mutate(is_access = factor(is_access),
+         is_access = fct_relevel(is_access, c("No Access", "Minimum Access", "Uncertain", "Easy Access")),
+         is_access = fct_rev(is_access)) |>
+  ggplot(aes(x = n, y = fct_rev(access_type), fill = is_access)) +
+  geom_col(position = "fill", color = "white") +
+  scale_fill_manual(values = c("#006894", "#f8f6e9", "#f5546d", "#ffcc00"),
+                    guide = guide_legend(reverse = TRUE)) +
+  geom_vline(xintercept = c(0.25, 0.5, 0.75), linetype = "dotted", linewidth = 0.5, color = "white") +
+  scale_x_continuous(labels = label_percent()) +
+  labs(y = NULL, x = NULL, fill = NULL,
+       title = "How does UMR provide access to...") +
+  theme_minimal(base_size = 15, base_family = "Atkinson Hyperlegible") +
+  theme(legend.position = "top")
+```
+
+## Row {.tabset height="60%"}
+
+```{r}
+#| title: "Convenience of Resource Access by Location"
+plotOutput('convenience_plot')
+```
+
+```{r}
+#| title: "Select Demographic Groups to Include in Plot"
+#| layout-ncol: 4
+
+checkboxGroupInput(
+  "sexual_orientation",
+  "Sexual Orientation",
+  levels(factor(convenience_orientation$orientation)),
+  selected = levels(factor(convenience_orientation$orientation))
+  )
+
+checkboxGroupInput(
+  "race",
+  "Race/Ethnicity",
+  levels(factor(convenience_orientation$race)),
+  selected = levels(factor(convenience_orientation$race))
+  )
+
+checkboxGroupInput(
+  "school_year",
+  "Class Year",
+  levels(factor(convenience_orientation$school_year)),
+  selected = levels(factor(convenience_orientation$school_year))
+  )
+
+checkboxGroupInput(
+  "gender",
+  "Gender",
+  levels(factor(convenience_orientation$cleaned_gender)),
+  selected = levels(factor(convenience_orientation$cleaned_gender))
+  )
+
+
+```
+
+
+
+
+```{r}
+#| context: server
+
+output$convenience_plot <- renderPlot({
+  
+  convenience_orientation_props <- convenience_orientation |>
+  filter(orientation %in% input$sexual_orientation) |>
+  filter(race %in% input$race) |>
+  filter(school_year %in% input$school_year) |>
+  filter(cleaned_gender %in% input$gender) |>
+  count(convenience, location) |>
+  group_by(location) |>
+  mutate(prop = n / sum(n)) |>
+  ungroup()
+
+convenience_orientation_100perc_order <- convenience_orientation_props |>
+  filter(convenience == "Very convenient") |>
+  arrange(prop) |>
+  rowid_to_column(var = "order") |>
+  select(location, order)
+
+convenience_orientation_props_100perc <- convenience_orientation_props |>
+  left_join(convenience_orientation_100perc_order, by = join_by(location)) |>
+  mutate(
+    location = factor(location),
+    convenience = factor(convenience),
+    location = fct_reorder(location, order),
+    convenience = fct_rev(convenience)
+  )
+  
+  p <- ggplot(convenience_orientation_props_100perc, aes(y = location, x = prop, fill = convenience)) +
+  geom_col() +
+  scale_fill_manual(values = c("#f5546d", "#ffcc00", "#f8f6e9", "#c3dfd1", "#006894")) + 
+  scale_x_continuous(labels = label_percent()) +
+  scale_y_discrete(labels = label_wrap(30)) +
+  geom_vline(xintercept = c(0.25, 0.5, 0.75), linetype = "dotted", linewidth = 0.5, color = "white") +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  theme_minimal(base_size = 24, base_family = "Atkinson Hyperlegible") +
+  theme(
+    legend.position = "top",
+    legend.key.size = unit(0.75, "cm")
+  ) +
+  labs(
+    title = "Rate the CONVENIENCE of product acqusition from...",
+    y = NULL,
+    x = "Percentage",
+    fill = NULL
+  )
+  
+  p
+  
+})
+```
+
+# Comfortability
+
+## Row {height="40%"}
+
+### Column {width="30%"}
+
+```{r}
+#| content: valuebox
+#| title: "Percent of surveyed students who feel comfortable buying contraceptives"
+#| icon: box2-heart
+
+buy_contracept <- first_survey |> # From First Survey
+  count(`Comfortable Buying Contraceptives`) |>
+  mutate(prop = n / sum(n)) |>
+  filter(`Comfortable Buying Contraceptives` == "Yes") |>
+  pull(prop)
+
+# placeholder value
+list(value = label_percent(accuracy = 0.1)(buy_contracept),
+     color = "#6fa6f6")
+```
+
+### Column {width="30%"}
+
+```{r}
+#| content: valuebox
+#| title: "Percent of surveyed students who feel that UMR provides a safe, supportive environment"
+#| icon: person-heart
+
+umr_safe <- first_survey |> # From First Survey
+  count(`UMR Safe and Supportive Environment`) |>
+  mutate(prop = n / sum(n)) |>
+  filter(`UMR Safe and Supportive Environment` == "Yes") |>
+  pull(prop)
+
+# placeholder value
+list(value = label_percent(accuracy = 0.1)(umr_safe),
+     color = "#f4d7d3")
+```
+
+### Column {width="40%"}
+
+```{r}
+#| title: "Barriers to accessing contraceptives at UMR"
+
+barriers <- resource_use |>
+  select(contains("Barrier")) |>
+  pivot_longer(cols = contains("Barrier"),
+               names_to = "barrier_type",
+               values_to = "is_barrier",
+               values_drop_na = TRUE) |>
+  group_by(barrier_type) |>
+  summarize(total = sum(is_barrier), prop = mean(is_barrier)) |>
+  mutate(barrier_type = str_remove(barrier_type, "Barrier"),
+         barrier_type = str_replace_all(barrier_type, "'.'", " ")) |>
+  mutate(barrier_type = factor(barrier_type)) |>
+  filter(barrier_type != "Not Applicable") |>
+  mutate(barrier_type = fct_reorder(barrier_type, prop))
+
+barriers |>
+  ggplot(aes(y = barrier_type, x = prop)) +
+  geom_segment(aes(xend = 0, yend = barrier_type), color = "#006894") + 
+  geom_point(size = 4, color = "#006894") +
+  theme(legend.position = "none") +
+  xlim(c(0,1)) +
+  scale_x_continuous(labels = label_percent()) +
+  labs(x = "Percent of Responses",
+       y = "Type of Barrier")
+```
+
+## Row {.tabset height="60%"}
+
+```{r}
+#| title: "Comfortability of Accessing Resources by Location"
+plotOutput('comfortability_plot')
+```
+
+```{r}
+#| title: "Select Demographic Groups to Include in Plot"
+#| layout-ncol: 4
+
+checkboxGroupInput(
+  "comfort_sexual_orientation",
+  "Sexual Orientation",
+  levels(factor(comfortability$orientation)),
+  selected = levels(factor(comfortability$orientation))
+  )
+
+checkboxGroupInput(
+  "comfort_race",
+  "Race/Ethnicity",
+  levels(factor(comfortability$race)),
+  selected = levels(factor(comfortability$race))
+  )
+
+checkboxGroupInput(
+  "comfort_school_year",
+  "Class Year",
+  levels(factor(comfortability$school_year)),
+  selected = levels(factor(comfortability$school_year))
+  )
+
+checkboxGroupInput(
+  "comfort_gender",
+  "Gender",
+  levels(factor(comfortability$cleaned_gender)),
+  selected = levels(factor(comfortability$cleaned_gender))
+  )
+
+
+```
+
+
+```{r}
+#| context: server
+
+output$comfortability_plot <- renderPlot({
+  
+  comfortability_props <- comfortability |>
+  filter(orientation %in% input$comfort_sexual_orientation) |>
+  filter(race %in% input$comfort_race) |>
+  filter(school_year %in% input$comfort_school_year) |>
+  filter(cleaned_gender %in% input$comfort_gender) |>
+  count(comfortability, location) |>
+  group_by(location) |>
+  mutate(prop = n / sum(n)) |>
+  ungroup()
+
+comfortability_100perc_order <- comfortability_props |>
+  filter(comfortability == "Very comfortable") |>
+  arrange(prop) |>
+  rowid_to_column(var = "order") |>
+  select(location, order)
+
+comfortability_props_100perc <- comfortability_props |>
+  left_join(comfortability_100perc_order, by = join_by(location)) |>
+  mutate(
+    location = factor(location),
+    comfortability = factor(comfortability),
+    location = fct_reorder(location, order),
+    comfortability = fct_rev(comfortability)
+  )
+  
+  p <- ggplot(comfortability_props_100perc, aes(y = location, x = prop, fill = comfortability)) +
+  geom_col() +
+  scale_fill_manual(values = c("#f5546d", "#ffcc00", "#f8f6e9", "#c3dfd1", "#006894")) + 
+  scale_x_continuous(labels = label_percent()) +
+  scale_y_discrete(labels = label_wrap(30)) +
+  geom_vline(xintercept = c(0.25, 0.5, 0.75), linetype = "dotted", linewidth = 0.5, color = "white") +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  theme_minimal(base_size = 24, base_family = "Atkinson Hyperlegible") +
+  theme(
+    legend.position = "top",
+    legend.key.size = unit(0.75, "cm")
+  ) +
+  labs(
+    title = "Rate your COMFORT of product acqusition from...",
+    y = NULL,
+    x = "Percentage",
+    fill = NULL
+  )
+  
+  p
+  
+})
+```
